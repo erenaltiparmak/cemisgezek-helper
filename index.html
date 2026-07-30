@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>cemizgezek-helper</title>
+<meta name="description" content="Doktorlar için hızlı klinik referans: tüyolar, reçete örnekleri ve acil orderlar." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ============ LOGIN EKRANI ============ -->
+<section id="login-screen" class="screen">
+  <div class="login-card">
+    <div class="brand">
+      <span class="brand-mark">CG</span>
+      <div class="brand-text">
+        <h1>cemizgezek<span class="brand-accent">-helper</span></h1>
+        <p class="brand-sub">Klinik hızlı referans</p>
+      </div>
+    </div>
+
+    <form id="login-form" class="login-form" autocomplete="on">
+      <label class="field">
+        <span class="field-label">E-posta</span>
+        <input type="email" id="login-email" name="email" required autocomplete="username" placeholder="ornek@klinik.com" />
+      </label>
+      <label class="field">
+        <span class="field-label">Şifre</span>
+        <input type="password" id="login-password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+      </label>
+
+      <button type="submit" class="btn btn-primary btn-block" id="login-submit">
+        <span class="btn-label">Giriş yap</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+
+      <p class="login-error" id="login-error" hidden></p>
+    </form>
+
+    <p class="login-footnote">Hesabın yok mu? Üyelik yalnızca yönetici tarafından tanımlanır.</p>
+  </div>
+  <div class="version-tag">v0.0.1</div>
+</section>
+
+<!-- ============ UYGULAMA ============ -->
+<div id="app-screen" class="screen app-shell" hidden>
+
+  <header class="app-header">
+    <div class="header-left">
+      <span class="brand-mark brand-mark-sm">CG</span>
+      <div class="header-title">
+        <h1>cemizgezek<span class="brand-accent">-helper</span></h1>
+        <span class="version-pill">v0.0.1</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <label class="admin-toggle" id="admin-toggle-wrap" hidden>
+        <input type="checkbox" id="admin-toggle" />
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Yönetici modu</span>
+      </label>
+
+      <div class="user-chip">
+        <span class="user-email" id="user-email"></span>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Çıkış</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Durum ara…" />
+      </div>
+
+      <nav class="category-nav" id="category-nav">
+        <!-- kategori chipleri JS ile doldurulur -->
+      </nav>
+
+      <div class="sidebar-admin" id="sidebar-admin" hidden>
+        <button class="btn btn-outline btn-block btn-sm" id="add-category-btn">+ Yeni kategori</button>
+        <button class="btn btn-accent btn-block btn-sm" id="add-condition-btn">+ Yeni durum</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-pane">
+
+      <!-- Liste görünümü -->
+      <section id="condition-list-view">
+        <div class="list-header">
+          <h2 id="list-title">Tüm durumlar</h2>
+          <span class="list-count" id="list-count"></span>
+        </div>
+        <div class="condition-grid" id="condition-grid">
+          <!-- kartlar JS ile doldurulur -->
+        </div>
+        <p class="empty-state" id="empty-state" hidden>Bu filtreyle eşleşen bir kayıt yok.</p>
+      </section>
+
+      <!-- Detay görünümü -->
+      <section id="condition-detail-view" hidden>
+        <button class="btn btn-ghost btn-sm back-btn" id="back-btn">← Listeye dön</button>
+
+        <div class="detail-head">
+          <div>
+            <span class="detail-category" id="detail-category"></span>
+            <h2 id="detail-name"></h2>
+            <p class="detail-summary" id="detail-summary"></p>
+          </div>
+          <div class="detail-admin-actions" id="detail-admin-actions" hidden>
+            <button class="btn btn-outline btn-sm" id="edit-condition-btn">Durumu düzenle</button>
+            <button class="btn btn-danger-outline btn-sm" id="delete-condition-btn">Sil</button>
+          </div>
+        </div>
+
+        <div class="section-block" data-kind="tip">
+          <div class="section-block-head">
+            <h3><span class="dot dot-tip"></span> Tüyolar</h3>
+            <button class="btn btn-outline btn-xs admin-only" data-add="tip" hidden>+ Ekle</button>
+          </div>
+          <ul class="tip-list" id="tip-list"></ul>
+          <p class="section-empty" id="tip-empty" hidden>Henüz tüyo eklenmedi.</p>
+        </div>
+
+        <div class="section-block" data-kind="prescription">
+          <div class="section-block-head">
+            <h3><span class="dot dot-rx"></span> Reçete örnekleri</h3>
+            <button class="btn btn-outline btn-xs admin-only" data-add="prescription" hidden>+ Ekle</button>
+          </div>
+          <div class="rx-list" id="prescription-list"></div>
+          <p class="section-empty" id="prescription-empty" hidden>Henüz reçete örneği eklenmedi.</p>
+        </div>
+
+        <div class="section-block" data-kind="emergency">
+          <div class="section-block-head">
+            <h3><span class="dot dot-emergency"></span> Acil orderlar &amp; tedaviler</h3>
+            <button class="btn btn-outline btn-xs admin-only" data-add="emergency" hidden>+ Ekle</button>
+          </div>
+          <div class="emergency-list" id="emergency-list"></div>
+          <p class="section-empty" id="emergency-empty" hidden>Henüz acil order eklenmedi.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ MODAL (admin form) ============ -->
+<div id="modal-overlay" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="modal-title">Başlık</h3>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <form id="modal-form" class="modal-form">
+      <div id="modal-fields"></div>
+      <p class="modal-error" id="modal-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">Vazgeç</button>
+        <button type="submit" class="btn btn-primary" id="modal-submit">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
