@@ -1,7 +1,18 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, APP_VERSION } from "./config.js";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// supabase-js, js/vendor/supabase.js içinde yerel olarak yükleniyor
+// (bkz. index.html) — bir CDN'e bağımlı kalmamak için bilerek böyle.
+if (!window.supabase || !window.supabase.createClient) {
+  document.body.innerHTML = `
+    <div style="padding:40px;font-family:sans-serif;color:#e2584a;max-width:520px;margin:60px auto;line-height:1.6">
+      <strong>Uygulama başlatılamadı.</strong><br />
+      <code>js/vendor/supabase.js</code> yüklenemedi. Dosyanın repo içinde
+      <code>js/vendor/supabase.js</code> konumunda olduğundan emin ol.
+    </div>`;
+  throw new Error("supabase-js bulunamadı (js/vendor/supabase.js)");
+}
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 console.log(`cemizgezek-helper ${APP_VERSION}`);
 
@@ -161,15 +172,20 @@ loginForm.addEventListener("submit", async (e) => {
   loginSubmit.querySelector(".btn-label").textContent = "Giriş yapılıyor…";
   loginSubmit.querySelector(".btn-spinner").hidden = false;
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  loginSubmit.disabled = false;
-  loginSubmit.querySelector(".btn-label").textContent = "Giriş yap";
-  loginSubmit.querySelector(".btn-spinner").hidden = true;
-
-  if (error) {
-    loginError.textContent = "Giriş başarısız: e-posta veya şifre hatalı.";
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      loginError.textContent = "Giriş başarısız: " + (error.message || "e-posta veya şifre hatalı.");
+      loginError.hidden = false;
+    }
+  } catch (err) {
+    console.error(err);
+    loginError.textContent = "Beklenmeyen bir hata oluştu: " + (err.message || err);
     loginError.hidden = false;
+  } finally {
+    loginSubmit.disabled = false;
+    loginSubmit.querySelector(".btn-label").textContent = "Giriş yap";
+    loginSubmit.querySelector(".btn-spinner").hidden = true;
   }
 });
 
