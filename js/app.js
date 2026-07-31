@@ -32,10 +32,11 @@ const logoutBtn = $("logout-btn");
 
 const adminToggleWrap = $("admin-toggle-wrap");
 const adminToggle = $("admin-toggle");
-const sidebarAdmin = $("sidebar-admin");
+const listAdminActions = $("list-admin-actions");
 
+const functionNav = $("function-nav");
 const searchInput = $("search-input");
-const categoryNav = $("category-nav");
+const categoryChips = $("category-chips");
 const addCategoryBtn = $("add-category-btn");
 const addConditionBtn = $("add-condition-btn");
 
@@ -54,8 +55,6 @@ const detailAdminActions = $("detail-admin-actions");
 const editConditionBtn = $("edit-condition-btn");
 const deleteConditionBtn = $("delete-condition-btn");
 
-const tipList = $("tip-list");
-const tipEmpty = $("tip-empty");
 const prescriptionList = $("prescription-list");
 const prescriptionEmpty = $("prescription-empty");
 const emergencyList = $("emergency-list");
@@ -158,7 +157,7 @@ async function onLoggedIn(session) {
 
   await loadCategories();
   await loadConditions();
-  renderCategoryNav();
+  renderCategoryChips();
   renderConditionGrid();
 }
 
@@ -203,7 +202,7 @@ adminToggle.addEventListener("change", () => {
 
 function applyAdminModeUI() {
   const on = state.adminMode;
-  sidebarAdmin.hidden = !on;
+  listAdminActions.hidden = !on;
   detailAdminActions.hidden = !on || !state.activeCondition;
   document.querySelectorAll(".admin-only").forEach((el) => { el.hidden = !on; });
 }
@@ -225,51 +224,63 @@ async function loadConditions() {
     .from("conditions")
     .select("id, category_id, name, summary, sort_order")
     .order("sort_order", { ascending: true });
-  if (error) { console.error(error); showToast("Durumlar yüklenemedi.", "error"); return; }
+  if (error) { console.error(error); showToast("Hastalıklar yüklenemedi.", "error"); return; }
   state.conditions = data || [];
 }
 
 async function loadConditionDetail(conditionId) {
-  const [tipsRes, rxRes, erRes] = await Promise.all([
-    supabase.from("tips").select("id, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
+  const [rxRes, erRes] = await Promise.all([
     supabase.from("prescriptions").select("id, title, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
     supabase.from("emergency_orders").select("id, title, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
   ]);
   return {
-    tips: tipsRes.data || [],
     prescriptions: rxRes.data || [],
     emergencyOrders: erRes.data || [],
   };
 }
 
 /* =========================================================
-   RENDER: sidebar / kategori navigasyonu
+   RENDER: sol menü (fonksiyonlar)
    ========================================================= */
-function renderCategoryNav() {
+functionNav.querySelectorAll(".nav-item").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    functionNav.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (btn.dataset.view === "hastaliklar") {
+      // detaydaysak listeye dön
+      state.activeCondition = null;
+      detailView.hidden = true;
+      listView.hidden = false;
+    }
+  });
+});
+
+/* =========================================================
+   RENDER: kategori chipleri (arama kutusunun altında, ana panelde)
+   ========================================================= */
+function renderCategoryChips() {
   const counts = new Map();
   state.conditions.forEach((c) => {
     counts.set(c.category_id, (counts.get(c.category_id) || 0) + 1);
   });
 
-  const allItem = `
-    <button class="category-item ${state.activeCategoryId === "all" ? "active" : ""}" data-cat="all">
-      <span>Tüm durumlar</span>
-      <span class="category-count">${state.conditions.length}</span>
+  const allChip = `
+    <button class="chip ${state.activeCategoryId === "all" ? "active" : ""}" data-cat="all">
+      Tümü <span class="chip-count">${state.conditions.length}</span>
     </button>`;
 
   const items = state.categories.map((cat) => `
-    <button class="category-item ${state.activeCategoryId === cat.id ? "active" : ""}" data-cat="${cat.id}">
-      <span>${escapeHtml(cat.name)}</span>
-      <span class="category-count">${counts.get(cat.id) || 0}</span>
+    <button class="chip ${state.activeCategoryId === cat.id ? "active" : ""}" data-cat="${cat.id}">
+      ${escapeHtml(cat.name)} <span class="chip-count">${counts.get(cat.id) || 0}</span>
     </button>`).join("");
 
-  categoryNav.innerHTML = allItem + items;
+  categoryChips.innerHTML = allChip + items;
 
-  categoryNav.querySelectorAll(".category-item").forEach((btn) => {
+  categoryChips.querySelectorAll(".chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       const val = btn.dataset.cat;
       state.activeCategoryId = val === "all" ? "all" : Number(val);
-      renderCategoryNav();
+      renderCategoryChips();
       renderConditionGrid();
     });
   });
@@ -292,7 +303,7 @@ function categoryName(id) {
 
 function renderConditionGrid() {
   const filtered = getFilteredConditions();
-  const activeCat = state.activeCategoryId === "all" ? "Tüm durumlar" : categoryName(state.activeCategoryId);
+  const activeCat = state.activeCategoryId === "all" ? "Tüm hastalıklar" : categoryName(state.activeCategoryId);
   listTitle.textContent = activeCat;
   listCount.textContent = filtered.length ? `${filtered.length} kayıt` : "";
 
@@ -332,33 +343,16 @@ async function openDetail(conditionId) {
   detailName.textContent = condition.name;
   detailSummary.textContent = condition.summary || "";
 
-  tipList.innerHTML = "";
   prescriptionList.innerHTML = "";
   emergencyList.innerHTML = "";
 
-  const { tips, prescriptions, emergencyOrders } = await loadConditionDetail(conditionId);
-  state.activeCondition.tips = tips;
+  const { prescriptions, emergencyOrders } = await loadConditionDetail(conditionId);
   state.activeCondition.prescriptions = prescriptions;
   state.activeCondition.emergencyOrders = emergencyOrders;
 
-  renderTips(tips);
   renderPrescriptions(prescriptions);
   renderEmergencyOrders(emergencyOrders);
   applyAdminModeUI();
-}
-
-function renderTips(tips) {
-  tipEmpty.hidden = tips.length !== 0;
-  tipList.innerHTML = tips.map((t) => `
-    <li data-id="${t.id}">
-      <div class="item-text">${escapeHtml(t.content)}</div>
-      <div class="item-admin-row admin-only" ${state.adminMode ? "" : "hidden"}>
-        <button class="btn btn-outline btn-xs" data-action="edit-tip" data-id="${t.id}">Düzenle</button>
-        <button class="btn btn-danger-outline btn-xs" data-action="delete-tip" data-id="${t.id}">Sil</button>
-      </div>
-    </li>
-  `).join("");
-  bindItemAdminActions();
 }
 
 function renderPrescriptions(items) {
@@ -480,14 +474,14 @@ addCategoryBtn.addEventListener("click", () => {
       const { error } = await supabase.from("categories").insert({ name: values.name.trim() });
       if (error) throw error;
       await loadCategories();
-      renderCategoryNav();
+      renderCategoryChips();
       showToast("Kategori eklendi.", "success");
     },
   });
 });
 
 /* =========================================================
-   ADMIN CRUD — durum (condition)
+   ADMIN CRUD — hastalık (condition)
    ========================================================= */
 function categoryOptions(selectedId) {
   return [
@@ -498,9 +492,9 @@ function categoryOptions(selectedId) {
 
 addConditionBtn.addEventListener("click", () => {
   openModal({
-    title: "Yeni durum",
+    title: "Yeni hastalık",
     fields: [
-      { name: "name", label: "Durum adı", required: true },
+      { name: "name", label: "Hastalık adı", required: true },
       { name: "category_id", label: "Kategori", type: "select", options: categoryOptions() },
       { name: "summary", label: "Kısa özet", type: "textarea", placeholder: "Bir-iki cümlelik özet…" },
     ],
@@ -512,9 +506,9 @@ addConditionBtn.addEventListener("click", () => {
       });
       if (error) throw error;
       await loadConditions();
-      renderCategoryNav();
+      renderCategoryChips();
       renderConditionGrid();
-      showToast("Durum eklendi.", "success");
+      showToast("Hastalık eklendi.", "success");
     },
   });
 });
@@ -522,9 +516,9 @@ addConditionBtn.addEventListener("click", () => {
 editConditionBtn.addEventListener("click", () => {
   const c = state.activeCondition;
   openModal({
-    title: "Durumu düzenle",
+    title: "Hastalığı düzenle",
     fields: [
-      { name: "name", label: "Durum adı", required: true },
+      { name: "name", label: "Hastalık adı", required: true },
       { name: "category_id", label: "Kategori", type: "select", options: categoryOptions() },
       { name: "summary", label: "Kısa özet", type: "textarea" },
     ],
@@ -537,24 +531,24 @@ editConditionBtn.addEventListener("click", () => {
       }).eq("id", c.id);
       if (error) throw error;
       await loadConditions();
-      renderCategoryNav();
+      renderCategoryChips();
       renderConditionGrid();
       await openDetail(c.id);
-      showToast("Durum güncellendi.", "success");
+      showToast("Hastalık güncellendi.", "success");
     },
   });
 });
 
 deleteConditionBtn.addEventListener("click", async () => {
   const c = state.activeCondition;
-  if (!confirm(`"${c.name}" durumunu ve tüm bağlı kayıtlarını (tüyolar, reçeteler, acil orderlar) silmek istediğine emin misin?`)) return;
+  if (!confirm(`"${c.name}" hastalığını ve tüm bağlı kayıtlarını (reçeteler, order/tedaviler) silmek istediğine emin misin?`)) return;
   const { error } = await supabase.from("conditions").delete().eq("id", c.id);
   if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
   await loadConditions();
-  renderCategoryNav();
+  renderCategoryChips();
   backBtn.click();
   renderConditionGrid();
-  showToast("Durum silindi.", "success");
+  showToast("Hastalık silindi.", "success");
 });
 
 /* =========================================================
@@ -565,18 +559,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
     const kind = btn.dataset.add;
     const conditionId = state.activeCondition.id;
 
-    if (kind === "tip") {
-      openModal({
-        title: "Yeni tüyo",
-        fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
-        onSubmit: async (values) => {
-          const { error } = await supabase.from("tips").insert({ condition_id: conditionId, content: values.content.trim() });
-          if (error) throw error;
-          await refreshDetail();
-          showToast("Tüyo eklendi.", "success");
-        },
-      });
-    } else if (kind === "prescription") {
+    if (kind === "prescription") {
       openModal({
         title: "Yeni reçete örneği",
         fields: [
@@ -622,28 +605,7 @@ async function refreshDetail() {
 async function handleItemAction(action, id) {
   const conditionId = state.activeCondition.id;
 
-  if (action === "edit-tip") {
-    const item = state.activeCondition.tips.find((t) => t.id === id);
-    openModal({
-      title: "Tüyoyu düzenle",
-      fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
-      initialValues: { content: item.content },
-      onSubmit: async (values) => {
-        const { error } = await supabase.from("tips").update({ content: values.content.trim() }).eq("id", id);
-        if (error) throw error;
-        await refreshDetail();
-        showToast("Tüyo güncellendi.", "success");
-      },
-    });
-  } else if (action === "delete-tip") {
-    if (!confirm("Bu tüyoyu silmek istediğine emin misin?")) return;
-    const { error } = await supabase.from("tips").delete().eq("id", id);
-    if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
-    await refreshDetail();
-    showToast("Tüyo silindi.", "success");
-  }
-
-  else if (action === "edit-prescription") {
+  if (action === "edit-prescription") {
     const item = state.activeCondition.prescriptions.find((p) => p.id === id);
     openModal({
       title: "Reçete örneğini düzenle",

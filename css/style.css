@@ -292,38 +292,69 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
 .sidebar {
   border-right: 1px solid var(--border-soft);
-  padding: 20px 16px;
-  display: flex; flex-direction: column; gap: 18px;
+  padding: 20px 14px;
+  display: flex; flex-direction: column; gap: 4px;
   background: rgba(26, 29, 36, 0.35);
 }
 
-.search-box input { font-size: 13.5px; }
-
-.category-nav { display: flex; flex-direction: column; gap: 3px; }
-.category-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 10px;
+/* fonksiyon menüsü (sol menü artık kategori değil, uygulama bölümleri içindir) */
+.function-nav { display: flex; flex-direction: column; gap: 3px; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-secondary);
+  background: none;
   border: 1px solid transparent;
+  width: 100%;
+  text-align: left;
 }
-.category-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
-.category-item.active {
+.nav-item .nav-icon { flex-shrink: 0; opacity: 0.85; }
+.nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.nav-item.active {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: rgba(255, 192, 137, 0.25);
-  font-weight: 600;
 }
-.category-count { font-family: var(--font-mono); font-size: 11px; opacity: 0.7; }
-
-.sidebar-admin { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px dashed var(--border); }
+.nav-item.active .nav-icon { opacity: 1; }
 
 .main-pane { padding: 26px 32px 60px; overflow-y: auto; }
 
-.list-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px; }
+/* liste üstü araç çubuğu: arama + kategori chipleri */
+.list-toolbar { margin-bottom: 22px; }
+.search-box input { font-size: 14px; padding: 12px 14px; }
+
+.category-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+.chip:hover { border-color: var(--accent-dim); color: var(--text-primary); }
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.chip .chip-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.65;
+}
+.chip.active .chip-count { opacity: 0.75; }
+
+.list-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
 .list-header h2 { font-size: 20px; }
 .list-count { color: var(--text-muted); font-size: 13px; font-family: var(--font-mono); }
+.list-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .empty-state { color: var(--text-muted); font-size: 14px; padding: 40px 0; text-align: center; }
 
@@ -404,26 +435,10 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   letter-spacing: 0.01em;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dot-tip { background: var(--tip-color); }
 .dot-rx { background: var(--rx-color); }
 .dot-emergency { background: var(--emergency-color); }
 
 .section-empty { color: var(--text-muted); font-size: 13.5px; padding: 4px 2px; }
-
-/* tips */
-.tip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.tip-list li {
-  position: relative;
-  padding: 12px 16px 12px 18px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-soft);
-  border-left: 3px solid var(--tip-color);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--text-primary);
-}
-.tip-list li .item-admin-row { margin-top: 8px; }
 
 /* prescription "reçete kağıdı" — imza öğesi */
 .rx-list, .emergency-list { display: flex; flex-direction: column; gap: 14px; }
@@ -530,16 +545,15 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    padding: 14px 16px;
+    padding: 12px 16px;
   }
-  .category-nav { flex-direction: row; flex-wrap: wrap; }
-  .sidebar-admin { margin-top: 0; padding-top: 0; border-top: none; flex-direction: row; }
-  .search-box { flex: 1 1 100%; }
+  .function-nav { flex-direction: row; flex-wrap: wrap; }
   .main-pane { padding: 20px 16px 50px; }
   .app-header { padding: 12px 16px; }
   .header-right { gap: 12px; }
   .toggle-label { display: none; }
   .detail-head { flex-direction: column; }
+  .list-header { flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

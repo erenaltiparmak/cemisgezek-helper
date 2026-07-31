@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>cemizgezek-helper</title>
-<meta name="description" content="Doktorlar için hızlı klinik referans: tüyolar, reçete örnekleri ve acil orderlar." />
+<meta name="description" content="Doktorlar için hızlı klinik referans: order/tedavi ve reçete örnekleri." />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -45,7 +45,7 @@
 
     <p class="login-footnote">Hesabın yok mu? Üyelik yalnızca yönetici tarafından tanımlanır.</p>
   </div>
-  <div class="version-tag">v0.0.2</div>
+  <div class="version-tag">v0.0.3</div>
 </section>
 
 <!-- ============ UYGULAMA ============ -->
@@ -56,7 +56,7 @@
       <span class="brand-mark brand-mark-sm">CG</span>
       <div class="header-title">
         <h1>cemizgezek<span class="brand-accent">-helper</span></h1>
-        <span class="version-pill">v0.0.2</span>
+        <span class="version-pill">v0.0.3</span>
       </div>
     </div>
 
@@ -76,20 +76,15 @@
 
   <div class="app-body">
 
-    <!-- SIDEBAR -->
+    <!-- SIDEBAR: uygulama fonksiyonları menüsü -->
     <aside class="sidebar">
-      <div class="search-box">
-        <input type="text" id="search-input" placeholder="Durum ara…" />
-      </div>
-
-      <nav class="category-nav" id="category-nav">
-        <!-- kategori chipleri JS ile doldurulur -->
+      <nav class="function-nav" id="function-nav">
+        <button class="nav-item active" data-view="hastaliklar">
+          <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a1 1 0 0 1 1-1Z"/><path d="M12 9v6M9 12h6"/></svg>
+          <span>Hastalıklar</span>
+        </button>
+        <!-- ileride eklenecek yeni fonksiyonlar buraya, bu düğmenin altına eklenecek -->
       </nav>
-
-      <div class="sidebar-admin" id="sidebar-admin" hidden>
-        <button class="btn btn-outline btn-block btn-sm" id="add-category-btn">+ Yeni kategori</button>
-        <button class="btn btn-accent btn-block btn-sm" id="add-condition-btn">+ Yeni durum</button>
-      </div>
     </aside>
 
     <!-- MAIN -->
@@ -97,10 +92,26 @@
 
       <!-- Liste görünümü -->
       <section id="condition-list-view">
-        <div class="list-header">
-          <h2 id="list-title">Tüm durumlar</h2>
-          <span class="list-count" id="list-count"></span>
+        <div class="list-toolbar">
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="Hastalık ara…" />
+          </div>
+          <div class="category-chips" id="category-chips">
+            <!-- kategori chipleri JS ile doldurulur -->
+          </div>
         </div>
+
+        <div class="list-header">
+          <div>
+            <h2 id="list-title">Tüm hastalıklar</h2>
+            <span class="list-count" id="list-count"></span>
+          </div>
+          <div class="list-header-actions admin-only" id="list-admin-actions" hidden>
+            <button class="btn btn-outline btn-sm" id="add-category-btn">+ Kategori</button>
+            <button class="btn btn-accent btn-sm" id="add-condition-btn">+ Hastalık</button>
+          </div>
+        </div>
+
         <div class="condition-grid" id="condition-grid">
           <!-- kartlar JS ile doldurulur -->
         </div>
@@ -118,18 +129,18 @@
             <p class="detail-summary" id="detail-summary"></p>
           </div>
           <div class="detail-admin-actions" id="detail-admin-actions" hidden>
-            <button class="btn btn-outline btn-sm" id="edit-condition-btn">Durumu düzenle</button>
+            <button class="btn btn-outline btn-sm" id="edit-condition-btn">Hastalığı düzenle</button>
             <button class="btn btn-danger-outline btn-sm" id="delete-condition-btn">Sil</button>
           </div>
         </div>
 
-        <div class="section-block" data-kind="tip">
+        <div class="section-block" data-kind="emergency">
           <div class="section-block-head">
-            <h3><span class="dot dot-tip"></span> Tüyolar</h3>
-            <button class="btn btn-outline btn-xs admin-only" data-add="tip" hidden>+ Ekle</button>
+            <h3><span class="dot dot-emergency"></span> Order / Tedavi</h3>
+            <button class="btn btn-outline btn-xs admin-only" data-add="emergency" hidden>+ Ekle</button>
           </div>
-          <ul class="tip-list" id="tip-list"></ul>
-          <p class="section-empty" id="tip-empty" hidden>Henüz tüyo eklenmedi.</p>
+          <div class="emergency-list" id="emergency-list"></div>
+          <p class="section-empty" id="emergency-empty" hidden>Henüz order/tedavi eklenmedi.</p>
         </div>
 
         <div class="section-block" data-kind="prescription">
@@ -139,15 +150,6 @@
           </div>
           <div class="rx-list" id="prescription-list"></div>
           <p class="section-empty" id="prescription-empty" hidden>Henüz reçete örneği eklenmedi.</p>
-        </div>
-
-        <div class="section-block" data-kind="emergency">
-          <div class="section-block-head">
-            <h3><span class="dot dot-emergency"></span> Acil orderlar &amp; tedaviler</h3>
-            <button class="btn btn-outline btn-xs admin-only" data-add="emergency" hidden>+ Ekle</button>
-          </div>
-          <div class="emergency-list" id="emergency-list"></div>
-          <p class="section-empty" id="emergency-empty" hidden>Henüz acil order eklenmedi.</p>
         </div>
       </section>
 
