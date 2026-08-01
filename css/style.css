@@ -26,6 +26,9 @@
   --rx-color-soft: rgba(147, 174, 212, 0.1);
   --emergency-color: #e2755f;
   --emergency-soft: rgba(226, 117, 95, 0.1);
+  --link-color: #8fc7b8;
+  --symptom-color: #c9a6e0;
+  --spot-color: #ffc089;
 
   --danger: #e2584a;
   --success: #82c19a;
@@ -322,11 +325,35 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
 .main-pane { padding: 26px 32px 60px; overflow-y: auto; }
 
-/* liste üstü araç çubuğu: arama + kategori chipleri */
+/* liste üstü araç çubuğu: arama (+ Tanılar'da bulgu chipleri) */
 .list-toolbar { margin-bottom: 22px; }
+.search-box { position: relative; }
 .search-box input { font-size: 14px; padding: 12px 14px; }
 
-.category-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.search-box-suggest .suggestion-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 30;
+}
+.suggestion-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover, .suggestion-item.highlighted { background: var(--accent-soft); color: var(--accent); }
+
+.symptom-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 14px;
@@ -350,13 +377,20 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   opacity: 0.65;
 }
 .chip.active .chip-count { opacity: 0.75; }
+.chip.chip-removable { padding-right: 8px; cursor: default; }
+.chip-remove {
+  background: none; border: none; color: inherit;
+  opacity: 0.75; font-size: 15px; line-height: 1;
+  padding: 0 2px; margin-left: 2px;
+}
+.chip-remove:hover { opacity: 1; }
 
 .list-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
 .list-header h2 { font-size: 20px; }
 .list-count { color: var(--text-muted); font-size: 13px; font-family: var(--font-mono); }
 .list-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-.empty-state { color: var(--text-muted); font-size: 14px; padding: 40px 0; text-align: center; }
+.empty-state { color: var(--text-muted); font-size: 14px; padding: 40px 0; text-align: center; line-height: 1.6; max-width: 480px; margin-left: auto; margin-right: auto; }
 
 /* =========================================================
    CONDITION CARDS
@@ -437,8 +471,40 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot-rx { background: var(--rx-color); }
 .dot-emergency { background: var(--emergency-color); }
+.dot-link { background: var(--link-color); }
+.dot-symptom { background: var(--symptom-color); }
 
 .section-empty { color: var(--text-muted); font-size: 13.5px; padding: 4px 2px; }
+
+/* iki sütunlu detay düzeni: ana içerik + sağda spot bilgiler paneli */
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 32px;
+  align-items: start;
+}
+.detail-side { position: sticky; top: 88px; }
+
+.spot-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 16px 16px 18px;
+}
+.spot-panel .section-block-head { margin-bottom: 14px; }
+.spot-panel .section-block-head h3 { font-size: 13.5px; }
+
+.spot-list { display: flex; flex-direction: column; gap: 10px; }
+.spot-item {
+  padding: 10px 12px 10px 14px;
+  background: var(--bg-elevated-2);
+  border-left: 3px solid var(--spot-color);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.spot-item .item-admin-row { margin-top: 8px; }
 
 /* prescription "reçete kağıdı" — imza öğesi */
 .rx-list, .emergency-list { display: flex; flex-direction: column; gap: 14px; }
@@ -481,6 +547,55 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 }
 
 .item-admin-row { display: flex; gap: 6px; margin-top: 12px; }
+
+/* faydalı linkler */
+.link-list { display: flex; flex-direction: column; gap: 8px; }
+.link-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--link-color);
+  border-radius: var(--radius-sm);
+}
+.link-open {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.link-open:hover { color: var(--link-color); }
+.link-open .link-icon {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(143, 199, 184, 0.12);
+  color: var(--link-color);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+.link-open .link-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-item .item-admin-row { margin-top: 0; flex-shrink: 0; }
+
+/* semptom etiketleri (hastalık detayında) */
+.symptom-tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.symptom-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  background: rgba(201, 166, 224, 0.1);
+  border: 1px solid rgba(201, 166, 224, 0.3);
+  color: var(--symptom-color);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.symptom-tag .tag-remove {
+  background: none; border: none; color: inherit;
+  opacity: 0.7; font-size: 14px; line-height: 1;
+  padding: 0 2px;
+}
+.symptom-tag .tag-remove:hover { opacity: 1; color: var(--danger); }
 
 /* =========================================================
    MODAL
@@ -554,6 +669,8 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   .toggle-label { display: none; }
   .detail-head { flex-direction: column; }
   .list-header { flex-direction: column; }
+  .detail-layout { grid-template-columns: 1fr; }
+  .detail-side { position: static; }
 }
 
 @media (prefers-reduced-motion: reduce) {

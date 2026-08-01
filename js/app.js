@@ -35,8 +35,9 @@ const adminToggle = $("admin-toggle");
 const listAdminActions = $("list-admin-actions");
 
 const functionNav = $("function-nav");
+
+/* Hastalıklar görünümü */
 const searchInput = $("search-input");
-const categoryChips = $("category-chips");
 const addCategoryBtn = $("add-category-btn");
 const addConditionBtn = $("add-condition-btn");
 
@@ -46,6 +47,18 @@ const listCount = $("list-count");
 const conditionGrid = $("condition-grid");
 const emptyState = $("empty-state");
 
+/* Tanılar görünümü */
+const diagnosisView = $("diagnosis-view");
+const diagnosisTitle = $("diagnosis-title");
+const diagnosisCount = $("diagnosis-count");
+const diagnosisGrid = $("diagnosis-grid");
+const diagnosisHint = $("diagnosis-hint");
+const diagnosisEmpty = $("diagnosis-empty");
+const symptomSearchInput = $("symptom-search-input");
+const symptomSuggestions = $("symptom-suggestions");
+const symptomChips = $("symptom-chips");
+
+/* Detay görünümü */
 const detailView = $("condition-detail-view");
 const backBtn = $("back-btn");
 const detailCategory = $("detail-category");
@@ -59,7 +72,15 @@ const prescriptionList = $("prescription-list");
 const prescriptionEmpty = $("prescription-empty");
 const emergencyList = $("emergency-list");
 const emergencyEmpty = $("emergency-empty");
+const linkList = $("link-list");
+const linkEmpty = $("link-empty");
+const symptomTagList = $("symptom-tag-list");
+const symptomTagEmpty = $("symptom-tag-empty");
+const addSymptomBtn = $("add-symptom-btn");
+const spotList = $("spot-list");
+const spotEmpty = $("spot-empty");
 
+/* Modal / toast */
 const modalOverlay = $("modal-overlay");
 const modalTitle = $("modal-title");
 const modalForm = $("modal-form");
@@ -79,9 +100,13 @@ const state = {
   profile: null,
   categories: [],
   conditions: [],
-  activeCategoryId: "all",
-  searchTerm: "",
+  symptoms: [],                       // { id, name }[]
+  conditionSymptomsMap: new Map(),    // conditionId -> Set(symptomId)
+  searchTerm: "",                     // Hastalıklar aramasi
+  selectedSymptomIds: [],             // Tanılar seçili bulgular (sıralı)
   activeCondition: null,
+  activeView: "hastaliklar",          // 'hastaliklar' | 'tanilar'
+  detailReturnView: "hastaliklar",
   adminMode: false,
 };
 
@@ -102,6 +127,12 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
   return div.innerHTML;
+}
+
+function normalizeUrl(raw) {
+  let url = (raw || "").trim();
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  return url;
 }
 
 /* =========================================================
@@ -155,10 +186,15 @@ async function onLoggedIn(session) {
   }
   applyAdminModeUI();
 
-  await loadCategories();
-  await loadConditions();
-  renderCategoryChips();
+  await Promise.all([
+    loadCategories(),
+    loadConditions(),
+    loadSymptoms(),
+    loadConditionSymptoms(),
+  ]);
+
   renderConditionGrid();
+  setActiveView("hastaliklar");
 }
 
 loginForm.addEventListener("submit", async (e) => {
@@ -208,6 +244,31 @@ function applyAdminModeUI() {
 }
 
 /* =========================================================
+   SOL MENÜ (fonksiyonlar arası geçiş)
+   ========================================================= */
+functionNav.querySelectorAll(".nav-item").forEach((btn) => {
+  btn.addEventListener("click", () => setActiveView(btn.dataset.view));
+});
+
+function setActiveView(view) {
+  state.activeView = view;
+  functionNav.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+
+  state.activeCondition = null;
+  detailView.hidden = true;
+
+  if (view === "tanilar") {
+    listView.hidden = true;
+    diagnosisView.hidden = false;
+    renderSymptomChips();
+    renderDiagnosisResults();
+  } else {
+    diagnosisView.hidden = true;
+    listView.hidden = false;
+  }
+}
+
+/* =========================================================
    VERİ ÇEKME
    ========================================================= */
 async function loadCategories() {
@@ -228,98 +289,84 @@ async function loadConditions() {
   state.conditions = data || [];
 }
 
+async function loadSymptoms() {
+  const { data, error } = await supabase
+    .from("symptoms")
+    .select("id, name")
+    .order("name", { ascending: true });
+  if (error) { console.error(error); showToast("Semptomlar yüklenemedi.", "error"); return; }
+  state.symptoms = data || [];
+}
+
+async function loadConditionSymptoms() {
+  const { data, error } = await supabase
+    .from("condition_symptoms")
+    .select("condition_id, symptom_id");
+  if (error) { console.error(error); return; }
+  const map = new Map();
+  (data || []).forEach((row) => {
+    if (!map.has(row.condition_id)) map.set(row.condition_id, new Set());
+    map.get(row.condition_id).add(row.symptom_id);
+  });
+  state.conditionSymptomsMap = map;
+}
+
 async function loadConditionDetail(conditionId) {
-  const [rxRes, erRes] = await Promise.all([
+  const [rxRes, erRes, linkRes, spotRes] = await Promise.all([
     supabase.from("prescriptions").select("id, title, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
     supabase.from("emergency_orders").select("id, title, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
+    supabase.from("useful_links").select("id, title, url, sort_order").eq("condition_id", conditionId).order("sort_order"),
+    supabase.from("spot_info").select("id, content, sort_order").eq("condition_id", conditionId).order("sort_order"),
   ]);
   return {
     prescriptions: rxRes.data || [],
     emergencyOrders: erRes.data || [],
+    links: linkRes.data || [],
+    spotInfo: spotRes.data || [],
   };
 }
 
 /* =========================================================
-   RENDER: sol menü (fonksiyonlar)
+   RENDER: ortak hastalık kartı
    ========================================================= */
-functionNav.querySelectorAll(".nav-item").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    functionNav.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    if (btn.dataset.view === "hastaliklar") {
-      // detaydaysak listeye dön
-      state.activeCondition = null;
-      detailView.hidden = true;
-      listView.hidden = false;
-    }
-  });
-});
-
-/* =========================================================
-   RENDER: kategori chipleri (arama kutusunun altında, ana panelde)
-   ========================================================= */
-function renderCategoryChips() {
-  const counts = new Map();
-  state.conditions.forEach((c) => {
-    counts.set(c.category_id, (counts.get(c.category_id) || 0) + 1);
-  });
-
-  const allChip = `
-    <button class="chip ${state.activeCategoryId === "all" ? "active" : ""}" data-cat="all">
-      Tümü <span class="chip-count">${state.conditions.length}</span>
-    </button>`;
-
-  const items = state.categories.map((cat) => `
-    <button class="chip ${state.activeCategoryId === cat.id ? "active" : ""}" data-cat="${cat.id}">
-      ${escapeHtml(cat.name)} <span class="chip-count">${counts.get(cat.id) || 0}</span>
-    </button>`).join("");
-
-  categoryChips.innerHTML = allChip + items;
-
-  categoryChips.querySelectorAll(".chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const val = btn.dataset.cat;
-      state.activeCategoryId = val === "all" ? "all" : Number(val);
-      renderCategoryChips();
-      renderConditionGrid();
-    });
-  });
-}
-
-/* =========================================================
-   RENDER: liste görünümü
-   ========================================================= */
-function getFilteredConditions() {
-  return state.conditions.filter((c) => {
-    const matchesCat = state.activeCategoryId === "all" || c.category_id === state.activeCategoryId;
-    const matchesSearch = !state.searchTerm || c.name.toLowerCase().includes(state.searchTerm) || (c.summary || "").toLowerCase().includes(state.searchTerm);
-    return matchesCat && matchesSearch;
-  });
-}
-
 function categoryName(id) {
   return state.categories.find((c) => c.id === id)?.name || "Kategorisiz";
 }
 
-function renderConditionGrid() {
-  const filtered = getFilteredConditions();
-  const activeCat = state.activeCategoryId === "all" ? "Tüm hastalıklar" : categoryName(state.activeCategoryId);
-  listTitle.textContent = activeCat;
-  listCount.textContent = filtered.length ? `${filtered.length} kayıt` : "";
-
-  conditionGrid.innerHTML = filtered.map((c) => `
+function renderConditionCard(c) {
+  return `
     <button class="condition-card" data-id="${c.id}">
       <span class="cat-tag">${escapeHtml(categoryName(c.category_id))}</span>
       <h3>${escapeHtml(c.name)}</h3>
       <p>${escapeHtml(c.summary || "")}</p>
-    </button>
-  `).join("");
+    </button>`;
+}
 
-  emptyState.hidden = filtered.length !== 0;
-
-  conditionGrid.querySelectorAll(".condition-card").forEach((card) => {
+function bindConditionCards(container) {
+  container.querySelectorAll(".condition-card").forEach((card) => {
     card.addEventListener("click", () => openDetail(Number(card.dataset.id)));
   });
+}
+
+/* =========================================================
+   RENDER: Hastalıklar listesi (sadece arama)
+   ========================================================= */
+function getFilteredConditions() {
+  const term = state.searchTerm;
+  if (!term) return state.conditions;
+  return state.conditions.filter((c) =>
+    c.name.toLowerCase().includes(term) || (c.summary || "").toLowerCase().includes(term)
+  );
+}
+
+function renderConditionGrid() {
+  const filtered = getFilteredConditions();
+  listTitle.textContent = "Tüm hastalıklar";
+  listCount.textContent = filtered.length ? `${filtered.length} kayıt` : "";
+
+  conditionGrid.innerHTML = filtered.map(renderConditionCard).join("");
+  emptyState.hidden = filtered.length !== 0;
+  bindConditionCards(conditionGrid);
 }
 
 searchInput.addEventListener("input", () => {
@@ -328,14 +375,115 @@ searchInput.addEventListener("input", () => {
 });
 
 /* =========================================================
+   RENDER: Tanılar (bulgu bazlı filtreleme)
+   ========================================================= */
+function renderSymptomChips() {
+  symptomChips.innerHTML = state.selectedSymptomIds.map((id) => {
+    const s = state.symptoms.find((sy) => sy.id === id);
+    if (!s) return "";
+    return `<span class="chip active chip-removable">${escapeHtml(s.name)} <button type="button" class="chip-remove" data-id="${id}" aria-label="Kaldır">&times;</button></span>`;
+  }).join("");
+
+  symptomChips.querySelectorAll(".chip-remove").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.id);
+      state.selectedSymptomIds = state.selectedSymptomIds.filter((x) => x !== id);
+      renderSymptomChips();
+      renderDiagnosisResults();
+    });
+  });
+}
+
+function renderDiagnosisResults() {
+  const selected = state.selectedSymptomIds;
+
+  if (selected.length === 0) {
+    diagnosisHint.hidden = false;
+    diagnosisEmpty.hidden = true;
+    diagnosisGrid.innerHTML = "";
+    diagnosisTitle.textContent = "Bulgu seçerek arayın";
+    diagnosisCount.textContent = "";
+    return;
+  }
+
+  diagnosisHint.hidden = true;
+  const matches = state.conditions.filter((c) => {
+    const set = state.conditionSymptomsMap.get(c.id);
+    if (!set) return false;
+    return selected.every((sid) => set.has(sid));
+  });
+
+  diagnosisTitle.textContent = `${selected.length} bulguya uyan hastalıklar`;
+  diagnosisCount.textContent = matches.length ? `${matches.length} kayıt` : "";
+  diagnosisGrid.innerHTML = matches.map(renderConditionCard).join("");
+  diagnosisEmpty.hidden = matches.length !== 0;
+  bindConditionCards(diagnosisGrid);
+}
+
+function selectSymptom(id) {
+  if (!state.selectedSymptomIds.includes(id)) {
+    state.selectedSymptomIds.push(id);
+  }
+  symptomSearchInput.value = "";
+  hideSymptomSuggestions();
+  renderSymptomChips();
+  renderDiagnosisResults();
+  symptomSearchInput.focus();
+}
+
+function showSymptomSuggestions(matches) {
+  if (matches.length === 0) { hideSymptomSuggestions(); return; }
+  symptomSuggestions.innerHTML = matches.map((s) =>
+    `<button type="button" class="suggestion-item" data-id="${s.id}">${escapeHtml(s.name)}</button>`
+  ).join("");
+  symptomSuggestions.hidden = false;
+  symptomSuggestions.querySelectorAll(".suggestion-item").forEach((btn) => {
+    btn.addEventListener("click", () => selectSymptom(Number(btn.dataset.id)));
+  });
+}
+
+function hideSymptomSuggestions() {
+  symptomSuggestions.hidden = true;
+  symptomSuggestions.innerHTML = "";
+}
+
+symptomSearchInput.addEventListener("input", () => {
+  const term = symptomSearchInput.value.trim().toLowerCase();
+  if (!term) { hideSymptomSuggestions(); return; }
+  const matches = state.symptoms
+    .filter((s) => !state.selectedSymptomIds.includes(s.id))
+    .filter((s) => s.name.toLowerCase().includes(term))
+    .slice(0, 8);
+  showSymptomSuggestions(matches);
+});
+
+symptomSearchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const first = symptomSuggestions.querySelector(".suggestion-item");
+    if (first) selectSymptom(Number(first.dataset.id));
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (symptomSuggestions.hidden) return;
+  if (!symptomSuggestions.contains(e.target) && e.target !== symptomSearchInput) {
+    hideSymptomSuggestions();
+  }
+});
+
+/* =========================================================
    RENDER: detay görünümü
    ========================================================= */
 async function openDetail(conditionId) {
   const condition = state.conditions.find((c) => c.id === conditionId);
   if (!condition) return;
+
+  state.detailReturnView = state.activeView;
   state.activeCondition = condition;
 
   listView.hidden = true;
+  diagnosisView.hidden = true;
   detailView.hidden = false;
   detailAdminActions.hidden = !state.adminMode;
 
@@ -345,13 +493,21 @@ async function openDetail(conditionId) {
 
   prescriptionList.innerHTML = "";
   emergencyList.innerHTML = "";
+  linkList.innerHTML = "";
+  spotList.innerHTML = "";
+  symptomTagList.innerHTML = "";
 
-  const { prescriptions, emergencyOrders } = await loadConditionDetail(conditionId);
+  const { prescriptions, emergencyOrders, links, spotInfo } = await loadConditionDetail(conditionId);
   state.activeCondition.prescriptions = prescriptions;
   state.activeCondition.emergencyOrders = emergencyOrders;
+  state.activeCondition.links = links;
+  state.activeCondition.spotInfo = spotInfo;
 
-  renderPrescriptions(prescriptions);
   renderEmergencyOrders(emergencyOrders);
+  renderPrescriptions(prescriptions);
+  renderLinks(links);
+  renderSymptomTags(condition.id);
+  renderSpotInfo(spotInfo);
   applyAdminModeUI();
 }
 
@@ -374,13 +530,57 @@ function renderEmergencyOrders(items) {
   emergencyEmpty.hidden = items.length !== 0;
   emergencyList.innerHTML = items.map((o) => `
     <div class="emergency-card" data-id="${o.id}">
-      <div class="emergency-card-title">${escapeHtml(o.title || "Acil order")}</div>
+      <div class="emergency-card-title">${escapeHtml(o.title || "Acil işlem")}</div>
       <div class="emergency-card-content">${escapeHtml(o.content)}</div>
       <div class="item-admin-row admin-only" ${state.adminMode ? "" : "hidden"}>
         <button class="btn btn-outline btn-xs" data-action="edit-emergency" data-id="${o.id}">Düzenle</button>
         <button class="btn btn-danger-outline btn-xs" data-action="delete-emergency" data-id="${o.id}">Sil</button>
       </div>
     </div>
+  `).join("");
+  bindItemAdminActions();
+}
+
+function renderLinks(items) {
+  linkEmpty.hidden = items.length !== 0;
+  linkList.innerHTML = items.map((l) => `
+    <div class="link-item" data-id="${l.id}">
+      <a class="link-open" href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer">
+        <span class="link-icon">↗</span>
+        <span class="link-title">${escapeHtml(l.title)}</span>
+      </a>
+      <div class="item-admin-row admin-only" ${state.adminMode ? "" : "hidden"}>
+        <button class="btn btn-outline btn-xs" data-action="edit-link" data-id="${l.id}">Düzenle</button>
+        <button class="btn btn-danger-outline btn-xs" data-action="delete-link" data-id="${l.id}">Sil</button>
+      </div>
+    </div>
+  `).join("");
+  bindItemAdminActions();
+}
+
+function renderSpotInfo(items) {
+  spotEmpty.hidden = items.length !== 0;
+  spotList.innerHTML = items.map((s) => `
+    <div class="spot-item" data-id="${s.id}">
+      <div>${escapeHtml(s.content)}</div>
+      <div class="item-admin-row admin-only" ${state.adminMode ? "" : "hidden"}>
+        <button class="btn btn-outline btn-xs" data-action="edit-spot" data-id="${s.id}">Düzenle</button>
+        <button class="btn btn-danger-outline btn-xs" data-action="delete-spot" data-id="${s.id}">Sil</button>
+      </div>
+    </div>
+  `).join("");
+  bindItemAdminActions();
+}
+
+function renderSymptomTags(conditionId) {
+  const set = state.conditionSymptomsMap.get(conditionId) || new Set();
+  const tags = state.symptoms.filter((s) => set.has(s.id));
+  symptomTagEmpty.hidden = tags.length !== 0;
+  symptomTagList.innerHTML = tags.map((s) => `
+    <span class="symptom-tag" data-id="${s.id}">
+      ${escapeHtml(s.name)}
+      <button type="button" class="tag-remove admin-only" data-action="remove-symptom" data-id="${s.id}" ${state.adminMode ? "" : "hidden"} aria-label="Kaldır">&times;</button>
+    </span>
   `).join("");
   bindItemAdminActions();
 }
@@ -394,7 +594,11 @@ function bindItemAdminActions() {
 backBtn.addEventListener("click", () => {
   state.activeCondition = null;
   detailView.hidden = true;
-  listView.hidden = false;
+  if (state.detailReturnView === "tanilar") {
+    diagnosisView.hidden = false;
+  } else {
+    listView.hidden = false;
+  }
 });
 
 /* =========================================================
@@ -405,6 +609,7 @@ function openModal({ title, fields, initialValues = {}, onSubmit }) {
   modalError.hidden = true;
   modalFields.innerHTML = fields.map((f) => {
     const val = initialValues[f.name] ?? "";
+
     if (f.type === "textarea") {
       return `
         <label class="field">
@@ -418,6 +623,16 @@ function openModal({ title, fields, initialValues = {}, onSubmit }) {
         <label class="field">
           <span class="field-label">${f.label}</span>
           <select name="${f.name}">${opts}</select>
+        </label>`;
+    }
+    if (f.type === "text-datalist") {
+      const listId = `dl-${f.name}-${Math.random().toString(36).slice(2, 8)}`;
+      const opts = (f.options || []).map((o) => `<option value="${escapeHtml(o)}"></option>`).join("");
+      return `
+        <label class="field">
+          <span class="field-label">${f.label}</span>
+          <input type="text" name="${f.name}" list="${listId}" value="${escapeHtml(val)}" ${f.required ? "required" : ""} placeholder="${f.placeholder || ""}" autocomplete="off" />
+          <datalist id="${listId}">${opts}</datalist>
         </label>`;
     }
     return `
@@ -474,7 +689,6 @@ addCategoryBtn.addEventListener("click", () => {
       const { error } = await supabase.from("categories").insert({ name: values.name.trim() });
       if (error) throw error;
       await loadCategories();
-      renderCategoryChips();
       showToast("Kategori eklendi.", "success");
     },
   });
@@ -483,7 +697,7 @@ addCategoryBtn.addEventListener("click", () => {
 /* =========================================================
    ADMIN CRUD — hastalık (condition)
    ========================================================= */
-function categoryOptions(selectedId) {
+function categoryOptions() {
   return [
     { value: "", label: "Kategori seç…" },
     ...state.categories.map((c) => ({ value: c.id, label: c.name })),
@@ -506,7 +720,6 @@ addConditionBtn.addEventListener("click", () => {
       });
       if (error) throw error;
       await loadConditions();
-      renderCategoryChips();
       renderConditionGrid();
       showToast("Hastalık eklendi.", "success");
     },
@@ -531,7 +744,6 @@ editConditionBtn.addEventListener("click", () => {
       }).eq("id", c.id);
       if (error) throw error;
       await loadConditions();
-      renderCategoryChips();
       renderConditionGrid();
       await openDetail(c.id);
       showToast("Hastalık güncellendi.", "success");
@@ -541,18 +753,60 @@ editConditionBtn.addEventListener("click", () => {
 
 deleteConditionBtn.addEventListener("click", async () => {
   const c = state.activeCondition;
-  if (!confirm(`"${c.name}" hastalığını ve tüm bağlı kayıtlarını (reçeteler, order/tedaviler) silmek istediğine emin misin?`)) return;
+  if (!confirm(`"${c.name}" hastalığını ve tüm bağlı kayıtlarını (reçeteler, acil işlemler, linkler, spot bilgiler, semptom bağlantıları) silmek istediğine emin misin?`)) return;
   const { error } = await supabase.from("conditions").delete().eq("id", c.id);
   if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
   await loadConditions();
-  renderCategoryChips();
+  state.conditionSymptomsMap.delete(c.id);
   backBtn.click();
   renderConditionGrid();
   showToast("Hastalık silindi.", "success");
 });
 
 /* =========================================================
-   ADMIN CRUD — tüyo / reçete / acil order (ekle)
+   ADMIN CRUD — semptom (hastalığa bağlama)
+   ========================================================= */
+async function addSymptomToCondition(conditionId, rawName) {
+  const name = rawName.trim();
+  if (!name) throw new Error("Semptom adı boş olamaz.");
+
+  let symptom = state.symptoms.find((s) => s.name.toLowerCase() === name.toLowerCase());
+  if (!symptom) {
+    const { data, error } = await supabase.from("symptoms").insert({ name }).select().single();
+    if (error) throw error;
+    symptom = data;
+    state.symptoms.push(symptom);
+    state.symptoms.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  }
+
+  if (!state.conditionSymptomsMap.has(conditionId)) state.conditionSymptomsMap.set(conditionId, new Set());
+  const set = state.conditionSymptomsMap.get(conditionId);
+  if (set.has(symptom.id)) return false;
+
+  const { error: linkError } = await supabase.from("condition_symptoms").insert({ condition_id: conditionId, symptom_id: symptom.id });
+  if (linkError && linkError.code !== "23505") throw linkError;
+
+  set.add(symptom.id);
+  return true;
+}
+
+addSymptomBtn.addEventListener("click", () => {
+  const conditionId = state.activeCondition.id;
+  openModal({
+    title: "Semptom ekle",
+    fields: [
+      { name: "name", label: "Semptom / bulgu adı", type: "text-datalist", required: true, options: state.symptoms.map((s) => s.name), placeholder: "örn. Çarpıntı" },
+    ],
+    onSubmit: async (values) => {
+      const added = await addSymptomToCondition(conditionId, values.name);
+      renderSymptomTags(conditionId);
+      showToast(added ? "Semptom eklendi." : "Bu semptom zaten ekli.", added ? "success" : "");
+    },
+  });
+});
+
+/* =========================================================
+   ADMIN CRUD — acil işlem / reçete / link / spot bilgi (ekle)
    ========================================================= */
 document.querySelectorAll("[data-add]").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -561,7 +815,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
 
     if (kind === "prescription") {
       openModal({
-        title: "Yeni reçete örneği",
+        title: "Yeni reçete",
         fields: [
           { name: "title", label: "Başlık (opsiyonel)", placeholder: "örn. İlk basamak" },
           { name: "content", label: "Reçete içeriği", type: "textarea", required: true },
@@ -572,12 +826,12 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
           });
           if (error) throw error;
           await refreshDetail();
-          showToast("Reçete örneği eklendi.", "success");
+          showToast("Reçete eklendi.", "success");
         },
       });
     } else if (kind === "emergency") {
       openModal({
-        title: "Yeni acil order",
+        title: "Yeni acil işlem",
         fields: [
           { name: "title", label: "Başlık (opsiyonel)", placeholder: "örn. İlk 10 dakika" },
           { name: "content", label: "İçerik", type: "textarea", required: true },
@@ -588,7 +842,36 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
           });
           if (error) throw error;
           await refreshDetail();
-          showToast("Acil order eklendi.", "success");
+          showToast("Acil işlem eklendi.", "success");
+        },
+      });
+    } else if (kind === "link") {
+      openModal({
+        title: "Yeni faydalı link",
+        fields: [
+          { name: "title", label: "Başlık", required: true, placeholder: "örn. CHA2DS2-VASc Hesaplayıcı" },
+          { name: "url", label: "URL", required: true, placeholder: "https://…" },
+        ],
+        onSubmit: async (values) => {
+          const { error } = await supabase.from("useful_links").insert({
+            condition_id: conditionId, title: values.title.trim(), url: normalizeUrl(values.url),
+          });
+          if (error) throw error;
+          await refreshDetail();
+          showToast("Link eklendi.", "success");
+        },
+      });
+    } else if (kind === "spot") {
+      openModal({
+        title: "Yeni spot bilgi",
+        fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
+        onSubmit: async (values) => {
+          const { error } = await supabase.from("spot_info").insert({
+            condition_id: conditionId, content: values.content.trim(),
+          });
+          if (error) throw error;
+          await refreshDetail();
+          showToast("Spot bilgi eklendi.", "success");
         },
       });
     }
@@ -600,7 +883,7 @@ async function refreshDetail() {
 }
 
 /* =========================================================
-   ADMIN CRUD — tüyo / reçete / acil order (düzenle / sil)
+   ADMIN CRUD — acil işlem / reçete / link / spot bilgi / semptom (düzenle / sil)
    ========================================================= */
 async function handleItemAction(action, id) {
   const conditionId = state.activeCondition.id;
@@ -608,7 +891,7 @@ async function handleItemAction(action, id) {
   if (action === "edit-prescription") {
     const item = state.activeCondition.prescriptions.find((p) => p.id === id);
     openModal({
-      title: "Reçete örneğini düzenle",
+      title: "Reçeteyi düzenle",
       fields: [
         { name: "title", label: "Başlık (opsiyonel)" },
         { name: "content", label: "Reçete içeriği", type: "textarea", required: true },
@@ -620,21 +903,21 @@ async function handleItemAction(action, id) {
         }).eq("id", id);
         if (error) throw error;
         await refreshDetail();
-        showToast("Reçete örneği güncellendi.", "success");
+        showToast("Reçete güncellendi.", "success");
       },
     });
   } else if (action === "delete-prescription") {
-    if (!confirm("Bu reçete örneğini silmek istediğine emin misin?")) return;
+    if (!confirm("Bu reçeteyi silmek istediğine emin misin?")) return;
     const { error } = await supabase.from("prescriptions").delete().eq("id", id);
     if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
     await refreshDetail();
-    showToast("Reçete örneği silindi.", "success");
+    showToast("Reçete silindi.", "success");
   }
 
   else if (action === "edit-emergency") {
     const item = state.activeCondition.emergencyOrders.find((o) => o.id === id);
     openModal({
-      title: "Acil orderı düzenle",
+      title: "Acil işlemi düzenle",
       fields: [
         { name: "title", label: "Başlık (opsiyonel)" },
         { name: "content", label: "İçerik", type: "textarea", required: true },
@@ -646,15 +929,72 @@ async function handleItemAction(action, id) {
         }).eq("id", id);
         if (error) throw error;
         await refreshDetail();
-        showToast("Acil order güncellendi.", "success");
+        showToast("Acil işlem güncellendi.", "success");
       },
     });
   } else if (action === "delete-emergency") {
-    if (!confirm("Bu acil orderı silmek istediğine emin misin?")) return;
+    if (!confirm("Bu acil işlemi silmek istediğine emin misin?")) return;
     const { error } = await supabase.from("emergency_orders").delete().eq("id", id);
     if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
     await refreshDetail();
-    showToast("Acil order silindi.", "success");
+    showToast("Acil işlem silindi.", "success");
+  }
+
+  else if (action === "edit-link") {
+    const item = state.activeCondition.links.find((l) => l.id === id);
+    openModal({
+      title: "Linki düzenle",
+      fields: [
+        { name: "title", label: "Başlık", required: true },
+        { name: "url", label: "URL", required: true, placeholder: "https://…" },
+      ],
+      initialValues: { title: item.title, url: item.url },
+      onSubmit: async (values) => {
+        const { error } = await supabase.from("useful_links").update({
+          title: values.title.trim(), url: normalizeUrl(values.url),
+        }).eq("id", id);
+        if (error) throw error;
+        await refreshDetail();
+        showToast("Link güncellendi.", "success");
+      },
+    });
+  } else if (action === "delete-link") {
+    if (!confirm("Bu linki silmek istediğine emin misin?")) return;
+    const { error } = await supabase.from("useful_links").delete().eq("id", id);
+    if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
+    await refreshDetail();
+    showToast("Link silindi.", "success");
+  }
+
+  else if (action === "edit-spot") {
+    const item = state.activeCondition.spotInfo.find((s) => s.id === id);
+    openModal({
+      title: "Spot bilgiyi düzenle",
+      fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
+      initialValues: { content: item.content },
+      onSubmit: async (values) => {
+        const { error } = await supabase.from("spot_info").update({ content: values.content.trim() }).eq("id", id);
+        if (error) throw error;
+        await refreshDetail();
+        showToast("Spot bilgi güncellendi.", "success");
+      },
+    });
+  } else if (action === "delete-spot") {
+    if (!confirm("Bu spot bilgiyi silmek istediğine emin misin?")) return;
+    const { error } = await supabase.from("spot_info").delete().eq("id", id);
+    if (error) { showToast("Silinemedi: " + error.message, "error"); return; }
+    await refreshDetail();
+    showToast("Spot bilgi silindi.", "success");
+  }
+
+  else if (action === "remove-symptom") {
+    if (!confirm("Bu semptomu hastalıktan kaldırmak istediğine emin misin?")) return;
+    const { error } = await supabase.from("condition_symptoms").delete()
+      .eq("condition_id", conditionId).eq("symptom_id", id);
+    if (error) { showToast("Kaldırılamadı: " + error.message, "error"); return; }
+    state.conditionSymptomsMap.get(conditionId)?.delete(id);
+    renderSymptomTags(conditionId);
+    showToast("Semptom kaldırıldı.", "success");
   }
 }
 

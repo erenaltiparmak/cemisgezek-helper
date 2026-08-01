@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>cemizgezek-helper</title>
-<meta name="description" content="Doktorlar için hızlı klinik referans: order/tedavi ve reçete örnekleri." />
+<meta name="description" content="Doktorlar için hızlı klinik referans: acil serviste yapılacaklar, reçeteler ve tanı yardımcısı." />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -45,7 +45,7 @@
 
     <p class="login-footnote">Hesabın yok mu? Üyelik yalnızca yönetici tarafından tanımlanır.</p>
   </div>
-  <div class="version-tag">v0.0.3</div>
+  <div class="version-tag">v0.0.4</div>
 </section>
 
 <!-- ============ UYGULAMA ============ -->
@@ -56,7 +56,7 @@
       <span class="brand-mark brand-mark-sm">CG</span>
       <div class="header-title">
         <h1>cemizgezek<span class="brand-accent">-helper</span></h1>
-        <span class="version-pill">v0.0.3</span>
+        <span class="version-pill">v0.0.4</span>
       </div>
     </div>
 
@@ -83,6 +83,10 @@
           <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a1 1 0 0 1 1-1Z"/><path d="M12 9v6M9 12h6"/></svg>
           <span>Hastalıklar</span>
         </button>
+        <button class="nav-item" data-view="tanilar">
+          <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.7-4.7"/></svg>
+          <span>Tanılar</span>
+        </button>
         <!-- ileride eklenecek yeni fonksiyonlar buraya, bu düğmenin altına eklenecek -->
       </nav>
     </aside>
@@ -95,9 +99,6 @@
         <div class="list-toolbar">
           <div class="search-box">
             <input type="text" id="search-input" placeholder="Hastalık ara…" />
-          </div>
-          <div class="category-chips" id="category-chips">
-            <!-- kategori chipleri JS ile doldurulur -->
           </div>
         </div>
 
@@ -118,6 +119,28 @@
         <p class="empty-state" id="empty-state" hidden>Bu filtreyle eşleşen bir kayıt yok.</p>
       </section>
 
+      <!-- Tanılar görünümü: bulgu/semptom seçerek hastalık filtreleme -->
+      <section id="diagnosis-view" hidden>
+        <div class="list-toolbar">
+          <div class="search-box search-box-suggest">
+            <input type="text" id="symptom-search-input" placeholder="Bulgu / semptom ara…" autocomplete="off" />
+            <div class="suggestion-dropdown" id="symptom-suggestions" hidden></div>
+          </div>
+          <div class="symptom-chips" id="symptom-chips"></div>
+        </div>
+
+        <div class="list-header">
+          <div>
+            <h2 id="diagnosis-title">Bulgu seçerek arayın</h2>
+            <span class="list-count" id="diagnosis-count"></span>
+          </div>
+        </div>
+
+        <p class="empty-state" id="diagnosis-hint">Yukarıdan bir bulgu/semptom arayıp seçin — o bulguya sahip olabilecek hastalıklar burada listelenmeye başlayacak. Birden fazla bulgu seçerek daraltabilirsiniz.</p>
+        <div class="condition-grid" id="diagnosis-grid"></div>
+        <p class="empty-state" id="diagnosis-empty" hidden>Seçtiğiniz bulguların tamamına sahip bir hastalık bulunamadı.</p>
+      </section>
+
       <!-- Detay görünümü -->
       <section id="condition-detail-view" hidden>
         <button class="btn btn-ghost btn-sm back-btn" id="back-btn">← Listeye dön</button>
@@ -134,22 +157,57 @@
           </div>
         </div>
 
-        <div class="section-block" data-kind="emergency">
-          <div class="section-block-head">
-            <h3><span class="dot dot-emergency"></span> Order / Tedavi</h3>
-            <button class="btn btn-outline btn-xs admin-only" data-add="emergency" hidden>+ Ekle</button>
-          </div>
-          <div class="emergency-list" id="emergency-list"></div>
-          <p class="section-empty" id="emergency-empty" hidden>Henüz order/tedavi eklenmedi.</p>
-        </div>
+        <div class="detail-layout">
+          <div class="detail-main">
 
-        <div class="section-block" data-kind="prescription">
-          <div class="section-block-head">
-            <h3><span class="dot dot-rx"></span> Reçete örnekleri</h3>
-            <button class="btn btn-outline btn-xs admin-only" data-add="prescription" hidden>+ Ekle</button>
+            <div class="section-block" data-kind="emergency">
+              <div class="section-block-head">
+                <h3><span class="dot dot-emergency"></span> Acil serviste yapılacaklar</h3>
+                <button class="btn btn-outline btn-xs admin-only" data-add="emergency" hidden>+ Ekle</button>
+              </div>
+              <div class="emergency-list" id="emergency-list"></div>
+              <p class="section-empty" id="emergency-empty" hidden>Henüz acil işlem eklenmedi.</p>
+            </div>
+
+            <div class="section-block" data-kind="prescription">
+              <div class="section-block-head">
+                <h3><span class="dot dot-rx"></span> Reçeteler</h3>
+                <button class="btn btn-outline btn-xs admin-only" data-add="prescription" hidden>+ Ekle</button>
+              </div>
+              <div class="rx-list" id="prescription-list"></div>
+              <p class="section-empty" id="prescription-empty" hidden>Henüz reçete eklenmedi.</p>
+            </div>
+
+            <div class="section-block" data-kind="links">
+              <div class="section-block-head">
+                <h3><span class="dot dot-link"></span> Faydalı linkler</h3>
+                <button class="btn btn-outline btn-xs admin-only" data-add="link" hidden>+ Ekle</button>
+              </div>
+              <div class="link-list" id="link-list"></div>
+              <p class="section-empty" id="link-empty" hidden>Henüz link eklenmedi.</p>
+            </div>
+
+            <div class="section-block" data-kind="symptoms">
+              <div class="section-block-head">
+                <h3><span class="dot dot-symptom"></span> Semptomlar</h3>
+                <button class="btn btn-outline btn-xs admin-only" id="add-symptom-btn" hidden>+ Ekle</button>
+              </div>
+              <div class="symptom-tag-list" id="symptom-tag-list"></div>
+              <p class="section-empty" id="symptom-tag-empty" hidden>Henüz semptom eklenmedi.</p>
+            </div>
+
           </div>
-          <div class="rx-list" id="prescription-list"></div>
-          <p class="section-empty" id="prescription-empty" hidden>Henüz reçete örneği eklenmedi.</p>
+
+          <aside class="detail-side">
+            <div class="spot-panel">
+              <div class="section-block-head">
+                <h3>Spot bilgiler</h3>
+                <button class="btn btn-outline btn-xs admin-only" data-add="spot" hidden>+ Ekle</button>
+              </div>
+              <div class="spot-list" id="spot-list"></div>
+              <p class="section-empty" id="spot-empty" hidden>Henüz spot bilgi eklenmedi.</p>
+            </div>
+          </aside>
         </div>
       </section>
 
