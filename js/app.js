@@ -38,7 +38,6 @@ const functionNav = $("function-nav");
 
 /* Hastalıklar görünümü */
 const searchInput = $("search-input");
-const addCategoryBtn = $("add-category-btn");
 const addConditionBtn = $("add-condition-btn");
 
 const listView = $("condition-list-view");
@@ -61,9 +60,7 @@ const symptomChips = $("symptom-chips");
 /* Detay görünümü */
 const detailView = $("condition-detail-view");
 const backBtn = $("back-btn");
-const detailCategory = $("detail-category");
 const detailName = $("detail-name");
-const detailSummary = $("detail-summary");
 const detailAdminActions = $("detail-admin-actions");
 const editConditionBtn = $("edit-condition-btn");
 const deleteConditionBtn = $("delete-condition-btn");
@@ -98,7 +95,6 @@ const toastEl = $("toast");
 const state = {
   session: null,
   profile: null,
-  categories: [],
   conditions: [],
   symptoms: [],                       // { id, name }[]
   conditionSymptomsMap: new Map(),    // conditionId -> Set(symptomId)
@@ -138,9 +134,12 @@ function normalizeUrl(raw) {
 /* =========================================================
    AUTH
    ========================================================= */
+let hasInitializedApp = false;
+
 async function initAuth() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
+    hasInitializedApp = true;
     await onLoggedIn(session);
   } else {
     showLogin();
@@ -148,8 +147,17 @@ async function initAuth() {
 
   supabase.auth.onAuthStateChange(async (event, session) => {
     if (event === "SIGNED_IN" && session) {
-      await onLoggedIn(session);
+      // Not: Supabase, sekme odağı geri geldiğinde token yenilemesiyle
+      // birlikte SIGNED_IN event'ini tekrar tetikleyebilir. Uygulama zaten
+      // başlatılmışsa burada state.session'ı güncelleyip arayüzü SIFIRLAMIYORUZ
+      // — aksi halde açık olan hastalık sayfası kapanıp anasayfaya dönerdi.
+      state.session = session;
+      if (!hasInitializedApp) {
+        hasInitializedApp = true;
+        await onLoggedIn(session);
+      }
     } else if (event === "SIGNED_OUT") {
+      hasInitializedApp = false;
       showLogin();
     }
   });
@@ -187,7 +195,6 @@ async function onLoggedIn(session) {
   applyAdminModeUI();
 
   await Promise.all([
-    loadCategories(),
     loadConditions(),
     loadSymptoms(),
     loadConditionSymptoms(),
@@ -271,19 +278,10 @@ function setActiveView(view) {
 /* =========================================================
    VERİ ÇEKME
    ========================================================= */
-async function loadCategories() {
-  const { data, error } = await supabase
-    .from("categories")
-    .select("id, name, sort_order")
-    .order("sort_order", { ascending: true });
-  if (error) { console.error(error); showToast("Kategoriler yüklenemedi.", "error"); return; }
-  state.categories = data || [];
-}
-
 async function loadConditions() {
   const { data, error } = await supabase
     .from("conditions")
-    .select("id, category_id, name, summary, sort_order")
+    .select("id, name, sort_order")
     .order("sort_order", { ascending: true });
   if (error) { console.error(error); showToast("Hastalıklar yüklenemedi.", "error"); return; }
   state.conditions = data || [];
@@ -329,16 +327,10 @@ async function loadConditionDetail(conditionId) {
 /* =========================================================
    RENDER: ortak hastalık kartı
    ========================================================= */
-function categoryName(id) {
-  return state.categories.find((c) => c.id === id)?.name || "Kategorisiz";
-}
-
 function renderConditionCard(c) {
   return `
     <button class="condition-card" data-id="${c.id}">
-      <span class="cat-tag">${escapeHtml(categoryName(c.category_id))}</span>
       <h3>${escapeHtml(c.name)}</h3>
-      <p>${escapeHtml(c.summary || "")}</p>
     </button>`;
 }
 
@@ -355,13 +347,13 @@ function getFilteredConditions() {
   const term = state.searchTerm;
   if (!term) return state.conditions;
   return state.conditions.filter((c) =>
-    c.name.toLowerCase().includes(term) || (c.summary || "").toLowerCase().includes(term)
+    c.name.toLowerCase().includes(term)
   );
 }
 
 function renderConditionGrid() {
   const filtered = getFilteredConditions();
-  listTitle.textContent = "Tüm hastalıklar";
+  listTitle.textContent = "Tüm Hastalıklar";
   listCount.textContent = filtered.length ? `${filtered.length} kayıt` : "";
 
   conditionGrid.innerHTML = filtered.map(renderConditionCard).join("");
@@ -401,7 +393,7 @@ function renderDiagnosisResults() {
     diagnosisHint.hidden = false;
     diagnosisEmpty.hidden = true;
     diagnosisGrid.innerHTML = "";
-    diagnosisTitle.textContent = "Bulgu seçerek arayın";
+    diagnosisTitle.textContent = "Bulgu Seçerek Arayın";
     diagnosisCount.textContent = "";
     return;
   }
@@ -413,7 +405,7 @@ function renderDiagnosisResults() {
     return selected.every((sid) => set.has(sid));
   });
 
-  diagnosisTitle.textContent = `${selected.length} bulguya uyan hastalıklar`;
+  diagnosisTitle.textContent = `${selected.length} Bulguya Uyan Hastalıklar`;
   diagnosisCount.textContent = matches.length ? `${matches.length} kayıt` : "";
   diagnosisGrid.innerHTML = matches.map(renderConditionCard).join("");
   diagnosisEmpty.hidden = matches.length !== 0;
@@ -487,9 +479,7 @@ async function openDetail(conditionId) {
   detailView.hidden = false;
   detailAdminActions.hidden = !state.adminMode;
 
-  detailCategory.textContent = categoryName(condition.category_id);
   detailName.textContent = condition.name;
-  detailSummary.textContent = condition.summary || "";
 
   prescriptionList.innerHTML = "";
   emergencyList.innerHTML = "";
@@ -679,44 +669,17 @@ modalForm.addEventListener("submit", async (e) => {
 });
 
 /* =========================================================
-   ADMIN CRUD — kategori
-   ========================================================= */
-addCategoryBtn.addEventListener("click", () => {
-  openModal({
-    title: "Yeni kategori",
-    fields: [{ name: "name", label: "Kategori adı", required: true }],
-    onSubmit: async (values) => {
-      const { error } = await supabase.from("categories").insert({ name: values.name.trim() });
-      if (error) throw error;
-      await loadCategories();
-      showToast("Kategori eklendi.", "success");
-    },
-  });
-});
-
-/* =========================================================
    ADMIN CRUD — hastalık (condition)
    ========================================================= */
-function categoryOptions() {
-  return [
-    { value: "", label: "Kategori seç…" },
-    ...state.categories.map((c) => ({ value: c.id, label: c.name })),
-  ];
-}
-
 addConditionBtn.addEventListener("click", () => {
   openModal({
-    title: "Yeni hastalık",
+    title: "Yeni Hastalık",
     fields: [
       { name: "name", label: "Hastalık adı", required: true },
-      { name: "category_id", label: "Kategori", type: "select", options: categoryOptions() },
-      { name: "summary", label: "Kısa özet", type: "textarea", placeholder: "Bir-iki cümlelik özet…" },
     ],
     onSubmit: async (values) => {
       const { error } = await supabase.from("conditions").insert({
         name: values.name.trim(),
-        category_id: values.category_id ? Number(values.category_id) : null,
-        summary: values.summary?.trim() || null,
       });
       if (error) throw error;
       await loadConditions();
@@ -729,18 +692,14 @@ addConditionBtn.addEventListener("click", () => {
 editConditionBtn.addEventListener("click", () => {
   const c = state.activeCondition;
   openModal({
-    title: "Hastalığı düzenle",
+    title: "Hastalığı Düzenle",
     fields: [
       { name: "name", label: "Hastalık adı", required: true },
-      { name: "category_id", label: "Kategori", type: "select", options: categoryOptions() },
-      { name: "summary", label: "Kısa özet", type: "textarea" },
     ],
-    initialValues: { name: c.name, category_id: c.category_id ?? "", summary: c.summary ?? "" },
+    initialValues: { name: c.name },
     onSubmit: async (values) => {
       const { error } = await supabase.from("conditions").update({
         name: values.name.trim(),
-        category_id: values.category_id ? Number(values.category_id) : null,
-        summary: values.summary?.trim() || null,
       }).eq("id", c.id);
       if (error) throw error;
       await loadConditions();
@@ -793,7 +752,7 @@ async function addSymptomToCondition(conditionId, rawName) {
 addSymptomBtn.addEventListener("click", () => {
   const conditionId = state.activeCondition.id;
   openModal({
-    title: "Semptom ekle",
+    title: "Semptom Ekle",
     fields: [
       { name: "name", label: "Semptom / bulgu adı", type: "text-datalist", required: true, options: state.symptoms.map((s) => s.name), placeholder: "örn. Çarpıntı" },
     ],
@@ -815,7 +774,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
 
     if (kind === "prescription") {
       openModal({
-        title: "Yeni reçete",
+        title: "Yeni Reçete",
         fields: [
           { name: "title", label: "Başlık (opsiyonel)", placeholder: "örn. İlk basamak" },
           { name: "content", label: "Reçete içeriği", type: "textarea", required: true },
@@ -831,7 +790,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
       });
     } else if (kind === "emergency") {
       openModal({
-        title: "Yeni acil işlem",
+        title: "Yeni Acil İşlem",
         fields: [
           { name: "title", label: "Başlık (opsiyonel)", placeholder: "örn. İlk 10 dakika" },
           { name: "content", label: "İçerik", type: "textarea", required: true },
@@ -847,7 +806,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
       });
     } else if (kind === "link") {
       openModal({
-        title: "Yeni faydalı link",
+        title: "Yeni Faydalı Link",
         fields: [
           { name: "title", label: "Başlık", required: true, placeholder: "örn. CHA2DS2-VASc Hesaplayıcı" },
           { name: "url", label: "URL", required: true, placeholder: "https://…" },
@@ -863,7 +822,7 @@ document.querySelectorAll("[data-add]").forEach((btn) => {
       });
     } else if (kind === "spot") {
       openModal({
-        title: "Yeni spot bilgi",
+        title: "Yeni Spot Bilgi",
         fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
         onSubmit: async (values) => {
           const { error } = await supabase.from("spot_info").insert({
@@ -891,7 +850,7 @@ async function handleItemAction(action, id) {
   if (action === "edit-prescription") {
     const item = state.activeCondition.prescriptions.find((p) => p.id === id);
     openModal({
-      title: "Reçeteyi düzenle",
+      title: "Reçeteyi Düzenle",
       fields: [
         { name: "title", label: "Başlık (opsiyonel)" },
         { name: "content", label: "Reçete içeriği", type: "textarea", required: true },
@@ -917,7 +876,7 @@ async function handleItemAction(action, id) {
   else if (action === "edit-emergency") {
     const item = state.activeCondition.emergencyOrders.find((o) => o.id === id);
     openModal({
-      title: "Acil işlemi düzenle",
+      title: "Acil İşlemi Düzenle",
       fields: [
         { name: "title", label: "Başlık (opsiyonel)" },
         { name: "content", label: "İçerik", type: "textarea", required: true },
@@ -943,7 +902,7 @@ async function handleItemAction(action, id) {
   else if (action === "edit-link") {
     const item = state.activeCondition.links.find((l) => l.id === id);
     openModal({
-      title: "Linki düzenle",
+      title: "Linki Düzenle",
       fields: [
         { name: "title", label: "Başlık", required: true },
         { name: "url", label: "URL", required: true, placeholder: "https://…" },
@@ -969,7 +928,7 @@ async function handleItemAction(action, id) {
   else if (action === "edit-spot") {
     const item = state.activeCondition.spotInfo.find((s) => s.id === id);
     openModal({
-      title: "Spot bilgiyi düzenle",
+      title: "Spot Bilgiyi Düzenle",
       fields: [{ name: "content", label: "İçerik", type: "textarea", required: true }],
       initialValues: { content: item.content },
       onSubmit: async (values) => {
