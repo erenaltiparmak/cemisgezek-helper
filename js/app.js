@@ -74,6 +74,9 @@ const linkEmpty = $("link-empty");
 const symptomTagList = $("symptom-tag-list");
 const symptomTagEmpty = $("symptom-tag-empty");
 const addSymptomBtn = $("add-symptom-btn");
+const keywordTagList = $("keyword-tag-list");
+const keywordTagEmpty = $("keyword-tag-empty");
+const editKeywordsBtn = $("edit-keywords-btn");
 const spotList = $("spot-list");
 const spotEmpty = $("spot-empty");
 
@@ -129,6 +132,10 @@ function normalizeUrl(raw) {
   let url = (raw || "").trim();
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   return url;
+}
+
+function trLower(str) {
+  return (str || "").toLocaleLowerCase("tr");
 }
 
 /* =========================================================
@@ -281,7 +288,7 @@ function setActiveView(view) {
 async function loadConditions() {
   const { data, error } = await supabase
     .from("conditions")
-    .select("id, name, sort_order")
+    .select("id, name, keywords, sort_order")
     .order("sort_order", { ascending: true });
   if (error) { console.error(error); showToast("Hastalıklar yüklenemedi.", "error"); return; }
   state.conditions = data || [];
@@ -347,7 +354,7 @@ function getFilteredConditions() {
   const term = state.searchTerm;
   if (!term) return state.conditions;
   return state.conditions.filter((c) =>
-    c.name.toLowerCase().includes(term)
+    trLower(c.name).includes(term) || trLower(c.keywords || "").includes(term)
   );
 }
 
@@ -362,7 +369,7 @@ function renderConditionGrid() {
 }
 
 searchInput.addEventListener("input", () => {
-  state.searchTerm = searchInput.value.trim().toLowerCase();
+  state.searchTerm = trLower(searchInput.value.trim());
   renderConditionGrid();
 });
 
@@ -440,11 +447,11 @@ function hideSymptomSuggestions() {
 }
 
 symptomSearchInput.addEventListener("input", () => {
-  const term = symptomSearchInput.value.trim().toLowerCase();
+  const term = trLower(symptomSearchInput.value.trim());
   if (!term) { hideSymptomSuggestions(); return; }
   const matches = state.symptoms
     .filter((s) => !state.selectedSymptomIds.includes(s.id))
-    .filter((s) => s.name.toLowerCase().includes(term))
+    .filter((s) => trLower(s.name).includes(term))
     .slice(0, 8);
   showSymptomSuggestions(matches);
 });
@@ -486,6 +493,7 @@ async function openDetail(conditionId) {
   linkList.innerHTML = "";
   spotList.innerHTML = "";
   symptomTagList.innerHTML = "";
+  keywordTagList.innerHTML = "";
 
   const { prescriptions, emergencyOrders, links, spotInfo } = await loadConditionDetail(conditionId);
   state.activeCondition.prescriptions = prescriptions;
@@ -497,6 +505,7 @@ async function openDetail(conditionId) {
   renderPrescriptions(prescriptions);
   renderLinks(links);
   renderSymptomTags(condition.id);
+  renderKeywordTags(condition);
   renderSpotInfo(spotInfo);
   applyAdminModeUI();
 }
@@ -573,6 +582,12 @@ function renderSymptomTags(conditionId) {
     </span>
   `).join("");
   bindItemAdminActions();
+}
+
+function renderKeywordTags(condition) {
+  const tags = (condition.keywords || "").split(",").map((k) => k.trim()).filter(Boolean);
+  keywordTagEmpty.hidden = tags.length !== 0;
+  keywordTagList.innerHTML = tags.map((k) => `<span class="keyword-tag">${escapeHtml(k)}</span>`).join("");
 }
 
 function bindItemAdminActions() {
@@ -729,7 +744,7 @@ async function addSymptomToCondition(conditionId, rawName) {
   const name = rawName.trim();
   if (!name) throw new Error("Semptom adı boş olamaz.");
 
-  let symptom = state.symptoms.find((s) => s.name.toLowerCase() === name.toLowerCase());
+  let symptom = state.symptoms.find((s) => trLower(s.name) === trLower(name));
   if (!symptom) {
     const { data, error } = await supabase.from("symptoms").insert({ name }).select().single();
     if (error) throw error;
@@ -760,6 +775,28 @@ addSymptomBtn.addEventListener("click", () => {
       const added = await addSymptomToCondition(conditionId, values.name);
       renderSymptomTags(conditionId);
       showToast(added ? "Semptom eklendi." : "Bu semptom zaten ekli.", added ? "success" : "");
+    },
+  });
+});
+
+/* =========================================================
+   ADMIN CRUD — anahtar kelimeler (hastalığa bağlı tek metin alanı)
+   ========================================================= */
+editKeywordsBtn.addEventListener("click", () => {
+  const c = state.activeCondition;
+  openModal({
+    title: "Anahtar Kelimeleri Düzenle",
+    fields: [
+      { name: "keywords", label: "Anahtar kelimeler (virgülle ayırın)", placeholder: "örn. GİS kanama, gastrointestinal sistem kanama, üst gis kanama" },
+    ],
+    initialValues: { keywords: c.keywords || "" },
+    onSubmit: async (values) => {
+      const cleaned = values.keywords.trim() || null;
+      const { error } = await supabase.from("conditions").update({ keywords: cleaned }).eq("id", c.id);
+      if (error) throw error;
+      c.keywords = cleaned;
+      renderKeywordTags(c);
+      showToast("Anahtar kelimeler güncellendi.", "success");
     },
   });
 });

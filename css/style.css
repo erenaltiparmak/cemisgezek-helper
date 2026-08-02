@@ -29,6 +29,7 @@
   --link-color: #8fc7b8;
   --symptom-color: #c9a6e0;
   --spot-color: #ffc089;
+  --keyword-color: #8b93a3;
 
   --danger: #e2584a;
   --success: #82c19a;
@@ -451,6 +452,7 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 .dot-emergency { background: var(--emergency-color); }
 .dot-link { background: var(--link-color); }
 .dot-symptom { background: var(--symptom-color); }
+.dot-keyword { background: var(--keyword-color); }
 
 .section-empty { color: var(--text-muted); font-size: 13.5px; padding: 4px 2px; }
 
@@ -574,6 +576,19 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   padding: 0 2px;
 }
 .symptom-tag .tag-remove:hover { opacity: 1; color: var(--danger); }
+
+/* anahtar kelimeler (arama için — bilinçli olarak nötr/soluk, klinik içerikten ayrışsın) */
+.keyword-tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.keyword-tag {
+  display: inline-flex; align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
 
 /* =========================================================
    MODAL
